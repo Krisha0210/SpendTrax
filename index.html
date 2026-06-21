@@ -345,9 +345,7 @@ select.form-input{cursor:pointer;-webkit-appearance:none;appearance:none;backgro
     </div>
     <div class="form-group">
       <label class="form-label">Choose Avatar</label>
-      <div class="pill-group" id="avatar-picker" style="justify-content:center">
-        ${['💰','👤','🦁','🐯','🦊','🐻','🐼','🦋','🌟','🔥','💎','🎯'].map(e=>`<span class="pill avatar-opt" onclick="selectAvatar(this,'${e}')">${e}</span>`).join('')}
-      </div>
+      <div class="pill-group" id="avatar-picker" style="justify-content:center"></div>
     </div>
     <div class="form-group">
       <label class="form-label">Set PIN (4 digits)</label>
@@ -732,6 +730,11 @@ function getProfile(){return db.profiles.find(p=>p.id===currentProfileId)||null}
 
 // ─── LOGIN ───────────────────────────────────────────────────────────────────
 load();
+// Fix corrupted avatars saved as '${e}' from old bug
+db.profiles.forEach(p=>{
+  if(!p.avatar||p.avatar==='${e}'||p.avatar.includes('{')){p.avatar='💰';}
+});
+save();
 renderLoginScreen();
 
 function renderLoginScreen(){
@@ -834,9 +837,12 @@ function showCreateProfile(){
   document.getElementById('profiles-container').style.display='none';
   document.getElementById('create-profile-screen').style.display='block';
   selectedAvatar='💰';
-  document.querySelectorAll('.avatar-opt').forEach((el,i)=>{
-    el.classList.toggle('selected',i===0);
-  });
+  // Build avatar picker dynamically so emojis render correctly
+  const EMOJI_LIST=['💰','👤','🦁','🐯','🦊','🐻','🐼','🦋','🌟','🔥','💎','🎯'];
+  const picker=document.getElementById('avatar-picker');
+  picker.innerHTML=EMOJI_LIST.map((e,i)=>
+    `<span class="pill avatar-opt${i===0?' selected':''}" onclick="selectAvatar(this,'${e}')">${e}</span>`
+  ).join('');
 }
 function selectAvatar(el,emoji){
   document.querySelectorAll('.avatar-opt').forEach(x=>x.classList.remove('selected'));
@@ -908,8 +914,6 @@ function renderDashboard(){
   const p=getProfile();
   const now=new Date();
   const hrs=now.getHours();
-  const greet=hrs<12?'Good morning':'hrs<17?'Good afternoon':'Good evening';
-  // fix: inline ternary for greeting
   const g = hrs<12 ? 'Good morning' : hrs<17 ? 'Good afternoon' : 'Good evening';
   document.getElementById('greeting').textContent=`${g}, ${p.name} 👋`;
   document.getElementById('current-date').textContent=now.toLocaleDateString('en-IN',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
