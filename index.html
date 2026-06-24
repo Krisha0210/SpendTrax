@@ -20,7 +20,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--txt);font-s
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 #app{display:flex;height:100vh;overflow:hidden}
-#sidebar{width:var(--sidebar-w);min-width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:100;transition:transform .3s ease}
+#sidebar{width:var(--sidebar-w);min-width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:100;transition:transform .3s ease;flex-shrink:0}
 #main{flex:1;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column}
 #topbar{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:12px}
 #hamburger{display:none;background:none;border:none;cursor:pointer;color:var(--txt);padding:4px}
@@ -142,7 +142,7 @@ select.form-input{cursor:pointer;-webkit-appearance:none;appearance:none;backgro
 .modal-sub{font-size:13px;color:var(--txt2);margin-bottom:20px}
 .modal-actions{display:flex;gap:10px;margin-top:20px}
 /* AUTH SCREEN */
-#auth-screen{position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+#auth-screen{position:fixed;inset:0;background:var(--bg);z-index:1000;flex-direction:column;align-items:center;justify-content:center;padding:24px}
 .auth-logo{font-family:'Space Grotesk',sans-serif;font-size:32px;font-weight:700;text-align:center;margin-bottom:6px}
 .auth-logo span{color:var(--accent)}
 .auth-tagline{color:var(--txt2);text-align:center;margin-bottom:32px;font-size:14px}
@@ -225,7 +225,7 @@ select.form-input{cursor:pointer;-webkit-appearance:none;appearance:none;backgro
 .toast.warning{border-left:3px solid var(--amber)}
 .toast.info{border-left:3px solid var(--accent)}
 @media(max-width:900px){.stat-grid{grid-template-columns:repeat(2,1fr)}.grid-3-1{grid-template-columns:1fr}}
-@media(min-width:769px){#sidebar{position:relative!important;transform:none!important;width:var(--sidebar-w)!important;min-width:var(--sidebar-w)!important}#hamburger{display:none!important}#sidebar-overlay{display:none!important}}
+
 @media(max-width:768px){
   #sidebar{position:fixed;left:0;top:0;bottom:0;transform:translateX(-100%);z-index:100}
   #sidebar.open{transform:translateX(0)}
@@ -241,16 +241,16 @@ select.form-input{cursor:pointer;-webkit-appearance:none;appearance:none;backgro
   #toast-container{top:auto;bottom:20px;right:10px;left:10px}
   .toast{min-width:unset;max-width:unset;width:100%}
 }
-</style>
+@media(min-width:769px){#sidebar{position:relative!important;transform:translateX(0)!important;display:flex!important;width:260px!important;min-width:260px!important;flex-shrink:0!important}#hamburger{display:none!important}#sidebar-overlay{opacity:0!important;pointer-events:none!important}}</style>
 </head>
 <body>
 
 <!-- AUTH SCREEN -->
-<div id="auth-screen">
+<div id="auth-screen" style="display:flex">
   <div class="auth-logo">Spend<span>Trax</span></div>
   <p class="auth-tagline">Your personal finance dashboard — synced everywhere</p>
   <div class="auth-box">
-    <div class="auth-sync-badge">🔥 Firebase Sync — your data follows you on every device</div>
+    <div class="auth-sync-badge" style="color:#8891A5;background:rgba(108,99,255,.08);border:1px solid rgba(108,99,255,.25)">🔥 Firebase Sync — your data follows you on every device</div>
     <div class="auth-tabs">
       <div class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Sign In</div>
       <div class="auth-tab" id="tab-signup" onclick="switchAuthTab('signup')">Create Account</div>
@@ -835,6 +835,7 @@ async function doLogout(){
   }catch(err){console.error('Logout error:',err);}
 }
 window.doLogout=doLogout;
+window.updateProfileUI=updateProfileUI;
 
 // ── AUTH STATE ───────────────────────────────────────────────────────────────
 onAuthStateChanged(auth, async user=>{
@@ -858,6 +859,7 @@ onAuthStateChanged(auth, async user=>{
     }
     initApp();
     subscribeData();
+    updateProfileUI();
   } else {
     currentUser=null;
     document.getElementById('auth-screen').style.display='flex';
@@ -907,14 +909,24 @@ async function saveUserProfile(){
 
 // ── APP INIT ─────────────────────────────────────────────────────────────────
 function initApp(){
-  document.getElementById('sb-avatar').textContent=userProfile.avatar;
-  document.getElementById('sb-name').textContent=userProfile.name;
-  document.getElementById('sb-email').textContent=currentUser.email;
-  document.getElementById('tb-avatar').textContent=userProfile.avatar;
-  document.getElementById('tb-name').textContent=userProfile.name;
+  updateProfileUI();
   buildAddForm();
   buildBudgetForm();
   showView('dashboard');
+}
+function updateProfileUI(){
+  const name = userProfile.name || (currentUser && (currentUser.displayName || currentUser.email.split('@')[0])) || 'User';
+  const avatar = userProfile.avatar || '💰';
+  const el_sba = document.getElementById('sb-avatar');
+  const el_sbn = document.getElementById('sb-name');
+  const el_sbe = document.getElementById('sb-email');
+  const el_tba = document.getElementById('tb-avatar');
+  const el_tbn = document.getElementById('tb-name');
+  if(el_sba) el_sba.textContent = avatar;
+  if(el_sbn) el_sbn.textContent = name;
+  if(el_sbe) el_sbe.textContent = currentUser ? currentUser.email : '';
+  if(el_tba) el_tba.textContent = avatar;
+  if(el_tbn) el_tbn.textContent = name;
 }
 
 function refreshCurrentView(){
