@@ -11,6 +11,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
 :root{--bg:#0A0C10;--surface:#111318;--elevated:#1A1D24;--border:#22262F;--accent:#6C63FF;--accent-dim:#3D3899;--green:#00D68F;--red:#FF4C6A;--amber:#FFB830;--txt:#F0F2F8;--txt2:#8891A5;--txt3:#454C5E;--sidebar-w:260px;--radius:16px;--radius-sm:10px}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -668,13 +671,7 @@ select.form-input{cursor:pointer;-webkit-appearance:none;appearance:none;backgro
   </div>
 </div>
 
-<script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile }
-  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, deleteDoc, updateDoc, query, where }
-  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-
+<script>
 // ── FIREBASE CONFIG ──────────────────────────────────────────────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyB50DG1C-L2sxCk63oieURcppR7mZrbUJM",
@@ -685,9 +682,9 @@ const firebaseConfig = {
   appId: "1:379551720610:web:6a0d09d2dd7c48ea7b63fb",
   measurementId: "G-MCFLFREQ3T"
 };
-const firebaseApp = initializeApp(firebaseConfig);
-const auth = getAuth(firebaseApp);
-const db = getFirestore(firebaseApp);
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
 
 // ── CONSTANTS ────────────────────────────────────────────────────────────────
 const CATS = [
@@ -788,7 +785,7 @@ async function doLogin(){
   document.getElementById('auth-error').textContent='';
   if(!email||!pass){document.getElementById('auth-error').textContent='Enter email and password';return}
   try{
-    await signInWithEmailAndPassword(auth,email,pass);
+    await auth.signInWithEmailAndPassword(email,pass);
   }catch(e){
     document.getElementById('auth-error').textContent=
       e.code==='auth/invalid-credential'?'Wrong email or password':
@@ -806,9 +803,9 @@ async function doSignup(){
   if(!email||!pass){document.getElementById('auth-error').textContent='Enter email and password';return}
   if(pass.length<6){document.getElementById('auth-error').textContent='Password must be at least 6 characters';return}
   try{
-    const cred=await createUserWithEmailAndPassword(auth,email,pass);
-    await updateProfile(cred.user,{displayName:name});
-    await setDoc(doc(db,'users',cred.user.uid),{
+    const cred=await auth.createUserWithEmailAndPassword(email,pass);
+    await cred.user.updateProfile({displayName:name});
+    await db.collection('users').doc(cred.user.uid).set({
       name,avatar:signupAvatar,
       budget:{total:0,categories:{},alertAt:80},
       createdAt:new Date().toISOString()
@@ -830,7 +827,7 @@ async function doLogout(){
     if(barChart){barChart.destroy();barChart=null}
     if(trendChart){trendChart.destroy();trendChart=null}
     if(nwChart){nwChart.destroy();nwChart=null}
-    await signOut(auth);
+    await auth.signOut();
     // onAuthStateChanged will handle showing auth screen
   }catch(err){console.error('Logout error:',err);}
 }
@@ -838,13 +835,13 @@ window.doLogout=doLogout;
 window.updateProfileUI=updateProfileUI;
 
 // ── AUTH STATE ───────────────────────────────────────────────────────────────
-onAuthStateChanged(auth, async user=>{
+auth.onAuthStateChanged(async user=>{
   if(user){
     currentUser=user;
     document.getElementById('auth-screen').style.display='none';
     document.getElementById('app').style.display='flex';
     // Load profile
-    const snap=await getDoc(doc(db,'users',user.uid));
+    const snap=await db.collection('users').doc(user.uid).get();
     if(snap.exists()){
       const data=snap.data();
       userProfile={
@@ -855,7 +852,7 @@ onAuthStateChanged(auth, async user=>{
     } else {
       userProfile.name=user.displayName || user.email.split('@')[0];
       userProfile.avatar='💰';
-      await setDoc(doc(db,'users',user.uid),userProfile);
+      await db.collection('users').doc(user.uid).set(userProfile);
     }
     initApp();
     subscribeData();
@@ -871,15 +868,15 @@ onAuthStateChanged(auth, async user=>{
 function subscribeData(){
   setSyncStatus('syncing');
   // Expenses
-  const expQ=collection(db,'users',currentUser.uid,'expenses');
-  unsubExpenses=onSnapshot(expQ, snap=>{
+  const expQ=db.collection('users').doc(currentUser.uid).collection('expenses');
+  unsubExpenses=expQ.onSnapshot(snap=>{
     expenses=snap.docs.map(d=>({id:d.id,...d.data()}));
     setSyncStatus('synced');
     refreshCurrentView();
   }, err=>{setSyncStatus('offline');console.error(err)});
   // Net Worth items
-  const nwQ=collection(db,'users',currentUser.uid,'nwitems');
-  unsubNW=onSnapshot(nwQ, snap=>{
+  const nwQ=db.collection('users').doc(currentUser.uid).collection('nwitems');
+  unsubNW=nwQ.onSnapshot(snap=>{
     nwItems=snap.docs.map(d=>({id:d.id,...d.data()}));
     refreshCurrentView();
   });
@@ -888,23 +885,23 @@ function subscribeData(){
 async function saveExpense(e){
   setSyncStatus('syncing');
   const {id,...data}=e;
-  await setDoc(doc(db,'users',currentUser.uid,'expenses',id),data);
+  await db.collection('users').doc(currentUser.uid).collection('expenses').doc(id).set(data);
 }
 async function removeExpense(id){
   setSyncStatus('syncing');
-  await deleteDoc(doc(db,'users',currentUser.uid,'expenses',id));
+  await db.collection('users').doc(currentUser.uid).collection('expenses').doc(id).delete();
 }
 async function saveNWItemDB(item){
   const {id,...data}=item;
-  if(id) await setDoc(doc(db,'users',currentUser.uid,'nwitems',id),data);
-  else { const ref=await addDoc(collection(db,'users',currentUser.uid,'nwitems'),data); return ref.id; }
+  if(id) await db.collection('users').doc(currentUser.uid).collection('nwitems').doc(id).set(data);
+  else { const ref=await db.collection('users').doc(currentUser.uid).collection('nwitems').add(data); return ref.id; }
 }
 async function removeNWItem(id){
-  await deleteDoc(doc(db,'users',currentUser.uid,'nwitems',id));
+  await db.collection('users').doc(currentUser.uid).collection('nwitems').doc(id).delete();
 }
 async function saveUserProfile(){
   if(!currentUser) return;
-  await setDoc(doc(db,'users',currentUser.uid),userProfile,{merge:true});
+  await db.collection('users').doc(currentUser.uid).set(userProfile,{merge:true});
 }
 
 // ── APP INIT ─────────────────────────────────────────────────────────────────
