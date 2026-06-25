@@ -686,6 +686,19 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
+// ── PERSISTENCE: keep user logged in on all devices including mobile ──────────
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(e=>console.error('Persistence error:',e));
+
+// ── FIRESTORE OFFLINE PERSISTENCE: cache data for offline/mobile use ─────────
+db.enablePersistence({synchronizeTabs:true}).catch(err=>{
+  if(err.code==='failed-precondition'){
+    // Multiple tabs open, persistence only in one
+    db.enablePersistence().catch(e=>console.log('Persistence unavailable'));
+  } else if(err.code==='unimplemented'){
+    console.log('Offline persistence not available in this browser');
+  }
+});
+
 // ── CONSTANTS ────────────────────────────────────────────────────────────────
 const CATS = [
   {id:'food',label:'Food',emoji:'🍔'},{id:'transport',label:'Transport',emoji:'🚗'},
@@ -1526,6 +1539,7 @@ function renderBudgetStatus(){
   }
   document.getElementById('budget-status').innerHTML=html;
 }
+
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
 function loadSettingsView(){
   document.getElementById('settings-name').value=userProfile.name||'';
