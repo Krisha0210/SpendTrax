@@ -481,20 +481,36 @@ select.form-input{cursor:pointer;-webkit-appearance:none;appearance:none;backgro
     <div class="view" id="view-history">
       <div class="page-hdr"><h1>History</h1><p>All your spending</p></div>
       <div class="card card-sm" style="margin-bottom:16px">
-        <div class="filter-bar">
-          <input class="form-input" id="h-search" placeholder="🔍 Search..." oninput="renderHistory()">
-          <input class="form-input" id="h-from" type="date" onchange="renderHistory()" style="max-width:150px">
-          <input class="form-input" id="h-to" type="date" onchange="renderHistory()" style="max-width:150px">
-          <select class="form-input" id="h-cat" onchange="renderHistory()" style="max-width:150px">
-            <option value="">All Categories</option>
-          </select>
-          <select class="form-input" id="h-sort" onchange="renderHistory()" style="max-width:140px">
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="highest">Highest ₹</option>
-            <option value="lowest">Lowest ₹</option>
-          </select>
-          <button class="btn btn-ghost btn-sm" onclick="clearHistoryFilters()">Clear</button>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+          <input class="form-input" id="h-search" placeholder="🔍 Search description or category..." oninput="renderHistory()">
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:130px">
+              <label style="font-size:11px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.6px">From Date</label>
+              <input class="form-input" id="h-from" type="date" onchange="renderHistory()">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:130px">
+              <label style="font-size:11px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.6px">To Date</label>
+              <input class="form-input" id="h-to" type="date" onchange="renderHistory()">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:130px">
+              <label style="font-size:11px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.6px">Category</label>
+              <select class="form-input" id="h-cat" onchange="renderHistory()">
+                <option value="">All Categories</option>
+              </select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:130px">
+              <label style="font-size:11px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.6px">Sort By</label>
+              <select class="form-input" id="h-sort" onchange="renderHistory()">
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="highest">Highest Amount</option>
+                <option value="lowest">Lowest Amount</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="clearHistoryFilters()" style="align-self:flex-start">✕ Clear Filters</button>
         </div>
       </div>
       <div id="history-list"></div>
@@ -866,6 +882,18 @@ auth.onAuthStateChanged(async user=>{
           avatar: data.avatar || '💰',
           budget: data.budget || {total:0,categories:{},alertAt:80}
         };
+        // Rebuild budget form with saved values after profile loads
+        setTimeout(()=>{
+          const bi = document.getElementById('budget-total-input');
+          if(bi) bi.value = userProfile.budget.total || '';
+          const ap = document.getElementById('alert-pct-pills');
+          if(ap){
+            selectedAlertPct = userProfile.budget.alertAt || 80;
+            document.querySelectorAll('#alert-pct-pills .pill').forEach(el=>{
+              el.classList.toggle('selected', parseInt(el.textContent)===selectedAlertPct);
+            });
+          }
+        }, 300);
       } else {
         await db.collection('users').doc(user.uid).set(userProfile);
       }
@@ -1157,11 +1185,11 @@ window.renderHistory=function(){
     if(cat&&e.category!==cat) return false;
     return true;
   });
-  if(sort==='newest') list.sort((a,b)=>b.date.localeCompare(a.date));
+  if(sort==='newest') list.sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||'').localeCompare(a.createdAt||''));
   else if(sort==='oldest') list.sort((a,b)=>a.date.localeCompare(b.date));
-  else if(sort==='highest') list.sort((a,b)=>b.amount-a.amount);
-  else if(sort==='lowest') list.sort((a,b)=>a.amount-b.amount);
-  const visible=list.slice(0,historyPage*20);
+  else if(sort==='highest') list.sort((a,b)=>parseFloat(b.amount)-parseFloat(a.amount));
+  else if(sort==='lowest') list.sort((a,b)=>parseFloat(a.amount)-parseFloat(b.amount));
+  const visible=list.slice(0,historyPage*50);
   const container=document.getElementById('history-list');
   if(!list.length){
     container.innerHTML='<div class="tx-empty"><div class="te-icon">🔍</div>No expenses found</div>';
@@ -1518,7 +1546,16 @@ window.saveBudget=async function(){
   const categories={};
   CATS.forEach(c=>{const v=parseFloat(document.getElementById('catb-'+c.id)?.value)||0;if(v>0) categories[c.id]=v;});
   userProfile.budget={total,categories,alertAt:selectedAlertPct};
-  await saveUserProfile(); toast('Budget saved','success'); renderBudgetStatus();
+  // Save budget explicitly to Firestore with merge
+  try{
+    await db.collection('users').doc(currentUser.uid).set({
+      budget: userProfile.budget,
+      name: userProfile.name,
+      avatar: userProfile.avatar
+    }, {merge:true});
+    toast('Budget saved ✓','success');
+  }catch(e){toast('Error saving budget','error');console.error(e);}
+  renderBudgetStatus();
 };
 function renderBudgetStatus(){
   const now=new Date();
