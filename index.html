@@ -686,18 +686,15 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// ── PERSISTENCE: keep user logged in on all devices including mobile ──────────
-auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(e=>console.error('Persistence error:',e));
-
-// ── FIRESTORE OFFLINE PERSISTENCE: cache data for offline/mobile use ─────────
-db.enablePersistence({synchronizeTabs:true}).catch(err=>{
-  if(err.code==='failed-precondition'){
-    // Multiple tabs open, persistence only in one
-    db.enablePersistence().catch(e=>console.log('Persistence unavailable'));
-  } else if(err.code==='unimplemented'){
-    console.log('Offline persistence not available in this browser');
-  }
-});
+// ── ENABLE OFFLINE + AUTH PERSISTENCE BEFORE ANYTHING ELSE ───────────────────
+(async function setupPersistence(){
+  try {
+    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+  } catch(e){ console.warn('Auth persistence:', e.message); }
+  try {
+    await db.enablePersistence({synchronizeTabs:false});
+  } catch(e){ console.warn('Firestore persistence:', e.code); }
+})();
 
 // ── CONSTANTS ────────────────────────────────────────────────────────────────
 const CATS = [
@@ -851,27 +848,35 @@ window.updateProfileUI=updateProfileUI;
 auth.onAuthStateChanged(async user=>{
   if(user){
     currentUser=user;
+    // Show app immediately, load data in background
     document.getElementById('auth-screen').style.display='none';
     document.getElementById('app').style.display='flex';
-    // Load profile
-    const snap=await db.collection('users').doc(user.uid).get();
-    if(snap.exists()){
-      const data=snap.data();
-      userProfile={
-        name: data.name || user.displayName || user.email.split('@')[0],
-        avatar: data.avatar || '💰',
-        budget: data.budget || {total:0,categories:{},alertAt:80}
-      };
-    } else {
-      userProfile.name=user.displayName || user.email.split('@')[0];
-      userProfile.avatar='💰';
-      await db.collection('users').doc(user.uid).set(userProfile);
-    }
+    // Set name from auth first (instant, no network needed)
+    userProfile.name = user.displayName || user.email.split('@')[0];
+    userProfile.avatar = userProfile.avatar || '💰';
     initApp();
-    subscribeData();
     updateProfileUI();
+    // Then load full profile from Firestore
+    try {
+      const snap = await db.collection('users').doc(user.uid).get();
+      if(snap.exists()){
+        const data = snap.data();
+        userProfile = {
+          name: data.name || user.displayName || user.email.split('@')[0],
+          avatar: data.avatar || '💰',
+          budget: data.budget || {total:0,categories:{},alertAt:80}
+        };
+      } else {
+        await db.collection('users').doc(user.uid).set(userProfile);
+      }
+      updateProfileUI();
+    } catch(e){ console.warn('Profile load error:', e.message); }
+    // Subscribe to real-time data
+    subscribeData();
   } else {
     currentUser=null;
+    expenses=[];
+    nwItems=[];
     document.getElementById('auth-screen').style.display='flex';
     document.getElementById('app').style.display='none';
   }
@@ -879,20 +884,30 @@ auth.onAuthStateChanged(async user=>{
 
 // ── FIRESTORE SYNC ───────────────────────────────────────────────────────────
 function subscribeData(){
+  if(!currentUser) return;
   setSyncStatus('syncing');
+  // Unsubscribe any previous listeners first
+  if(unsubExpenses){unsubExpenses();unsubExpenses=null;}
+  if(unsubNW){unsubNW();unsubNW=null;}
   // Expenses
   const expQ=db.collection('users').doc(currentUser.uid).collection('expenses');
   unsubExpenses=expQ.onSnapshot(snap=>{
     expenses=snap.docs.map(d=>({id:d.id,...d.data()}));
     setSyncStatus('synced');
+    renderDashboard();
+    // Also refresh whichever view is active
     refreshCurrentView();
-  }, err=>{setSyncStatus('offline');console.error(err)});
+  }, err=>{
+    setSyncStatus('offline');
+    console.error('Expenses sync error:', err);
+    toast('Sync error: '+err.message,'error');
+  });
   // Net Worth items
   const nwQ=db.collection('users').doc(currentUser.uid).collection('nwitems');
   unsubNW=nwQ.onSnapshot(snap=>{
     nwItems=snap.docs.map(d=>({id:d.id,...d.data()}));
     refreshCurrentView();
-  });
+  }, err=>{ console.error('NW sync error:', err); });
 }
 
 async function saveExpense(e){
