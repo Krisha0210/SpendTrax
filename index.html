@@ -1547,6 +1547,7 @@ window.exportCSV=function(){
   a.download=`spendtrax-${reportPeriod==='monthly'?reportYear+'-'+(reportMonth+1):reportYear}.csv`;
   a.click(); toast('CSV exported','success');
 };
+
 // ── BUDGET ────────────────────────────────────────────────────────────────────
 function buildBudgetForm(){
   const ap=document.getElementById('alert-pct-pills');
@@ -1571,15 +1572,28 @@ window.saveBudget=async function(){
   const categories={};
   CATS.forEach(c=>{const v=parseFloat(document.getElementById('catb-'+c.id)?.value)||0;if(v>0) categories[c.id]=v;});
   userProfile.budget={total,categories,alertAt:selectedAlertPct};
-  // Save budget explicitly to Firestore with merge
+  console.log('[Budget Save] Attempting to save:', JSON.stringify(userProfile.budget));
+  console.log('[Budget Save] Current user UID:', currentUser ? currentUser.uid : 'NO USER');
+  if(!currentUser){
+    toast('Not logged in - cannot save','error');
+    console.error('[Budget Save] FAILED: currentUser is null');
+    return;
+  }
   try{
     await db.collection('users').doc(currentUser.uid).set({
       budget: userProfile.budget,
       name: userProfile.name,
       avatar: userProfile.avatar
     }, {merge:true});
+    console.log('[Budget Save] SUCCESS - write completed');
+    // Verify by reading it back immediately
+    const verifySnap = await db.collection('users').doc(currentUser.uid).get({source:'server'});
+    console.log('[Budget Save] Verification read:', JSON.stringify(verifySnap.data()));
     toast('Budget saved ✓','success');
-  }catch(e){toast('Error saving budget','error');console.error(e);}
+  }catch(e){
+    toast('Error saving budget: '+e.message,'error');
+    console.error('[Budget Save] FAILED with error:', e);
+  }
   renderBudgetStatus();
 };
 function renderBudgetStatus(){
