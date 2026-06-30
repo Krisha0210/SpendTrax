@@ -1547,7 +1547,6 @@ window.exportCSV=function(){
   a.download=`spendtrax-${reportPeriod==='monthly'?reportYear+'-'+(reportMonth+1):reportYear}.csv`;
   a.click(); toast('CSV exported','success');
 };
-
 // ── BUDGET ────────────────────────────────────────────────────────────────────
 function buildBudgetForm(){
   const ap=document.getElementById('alert-pct-pills');
