@@ -11,9 +11,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" onerror="window.__fbLoadError=true"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js" onerror="window.__fbLoadError=true"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js" onerror="window.__fbLoadError=true"></script>
 <style>
 :root{--bg:#0A0C10;--surface:#111318;--elevated:#1A1D24;--border:#22262F;--accent:#6C63FF;--accent-dim:#3D3899;--green:#00D68F;--red:#FF4C6A;--amber:#FFB830;--txt:#F0F2F8;--txt2:#8891A5;--txt3:#454C5E;--sidebar-w:260px;--radius:16px;--radius-sm:10px}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -688,6 +688,10 @@ select.form-input{cursor:pointer;-webkit-appearance:none;appearance:none;backgro
 </div>
 
 <script>
+if(typeof firebase === 'undefined'){
+  document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0A0C10;color:#F0F2F8;font-family:sans-serif;text-align:center;padding:24px"><div><h2 style="margin-bottom:12px">⚠️ Connection Issue</h2><p style="color:#8891A5;max-width:400px">Could not load Firebase. This usually means an ad-blocker, VPN, or firewall is blocking gstatic.com. Please disable ad-blockers for this site, or check your network, then reload.</p><button onclick="location.reload()" style="margin-top:16px;padding:10px 20px;background:#6C63FF;color:#fff;border:none;border-radius:8px;cursor:pointer">Reload Page</button></div></div>';
+  throw new Error('Firebase SDK failed to load - check ad-blocker or network');
+}
 // ── FIREBASE CONFIG ──────────────────────────────────────────────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyB50DG1C-L2sxCk63oieURcppR7mZrbUJM",
@@ -864,17 +868,17 @@ window.updateProfileUI=updateProfileUI;
 auth.onAuthStateChanged(async user=>{
   if(user){
     currentUser=user;
-    // Show app immediately, load data in background
     document.getElementById('auth-screen').style.display='none';
     document.getElementById('app').style.display='flex';
-    // Set name from auth first (instant, no network needed)
-    userProfile.name = user.displayName || user.email.split('@')[0];
-    userProfile.avatar = userProfile.avatar || '💰';
-    initApp();
-    updateProfileUI();
-    // Then load full profile from Firestore
+    // Set safe defaults first (instant, no network needed)
+    userProfile = {
+      name: user.displayName || user.email.split('@')[0],
+      avatar: '💰',
+      budget: {total:0,categories:{},alertAt:80}
+    };
+    // Load FULL profile from Firestore SERVER (not cache) BEFORE building UI
     try {
-      const snap = await db.collection('users').doc(user.uid).get();
+      const snap = await db.collection('users').doc(user.uid).get({source:'server'});
       if(snap.exists()){
         const data = snap.data();
         userProfile = {
@@ -882,23 +886,26 @@ auth.onAuthStateChanged(async user=>{
           avatar: data.avatar || '💰',
           budget: data.budget || {total:0,categories:{},alertAt:80}
         };
-        // Rebuild budget form with saved values after profile loads
-        setTimeout(()=>{
-          const bi = document.getElementById('budget-total-input');
-          if(bi) bi.value = userProfile.budget.total || '';
-          const ap = document.getElementById('alert-pct-pills');
-          if(ap){
-            selectedAlertPct = userProfile.budget.alertAt || 80;
-            document.querySelectorAll('#alert-pct-pills .pill').forEach(el=>{
-              el.classList.toggle('selected', parseInt(el.textContent)===selectedAlertPct);
-            });
-          }
-        }, 300);
       } else {
         await db.collection('users').doc(user.uid).set(userProfile);
       }
-      updateProfileUI();
-    } catch(e){ console.warn('Profile load error:', e.message); }
+    } catch(e) {
+      console.warn('Server fetch failed, trying cache:', e.message);
+      try {
+        const snap = await db.collection('users').doc(user.uid).get();
+        if(snap.exists()){
+          const data = snap.data();
+          userProfile = {
+            name: data.name || user.displayName || user.email.split('@')[0],
+            avatar: data.avatar || '💰',
+            budget: data.budget || {total:0,categories:{},alertAt:80}
+          };
+        }
+      } catch(e2){ console.warn('Cache fetch also failed:', e2.message); }
+    }
+    // NOW build the UI with correct profile/budget data already loaded
+    initApp();
+    updateProfileUI();
     // Subscribe to real-time data
     subscribeData();
   } else {
