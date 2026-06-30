@@ -879,7 +879,7 @@ auth.onAuthStateChanged(async user=>{
     // Load FULL profile from Firestore SERVER (not cache) BEFORE building UI
     try {
       const snap = await db.collection('users').doc(user.uid).get({source:'server'});
-      if(snap.exists()){
+      if(snap.exists){
         const data = snap.data();
         userProfile = {
           name: data.name || user.displayName || user.email.split('@')[0],
@@ -893,7 +893,7 @@ auth.onAuthStateChanged(async user=>{
       console.warn('Server fetch failed, trying cache:', e.message);
       try {
         const snap = await db.collection('users').doc(user.uid).get();
-        if(snap.exists()){
+        if(snap.exists){
           const data = snap.data();
           userProfile = {
             name: data.name || user.displayName || user.email.split('@')[0],
@@ -1073,7 +1073,7 @@ function renderDashboard(){
   const biggest=periodExp.length?periodExp.reduce((a,b)=>a.amount>b.amount?a:b):null;
   const periodLabel=dashPeriod==='weekly'?'This Week':dashPeriod==='monthly'?'This Month':'This Year';
   document.getElementById('pie-period-label').textContent=periodLabel;
-  document.getElementById('pie-center-lbl').textContent=periodLabel.toLowerCase();
+  // pie-center-lbl element removed per user request
 
   // Budget banner (monthly only)
   const bb=document.getElementById('budget-banner-wrap');
@@ -1101,7 +1101,7 @@ function renderPieChart(exp){
   const data=labels.map(k=>bycat[k]);
   const colors=labels.map((_,i)=>CAT_COLORS[i%CAT_COLORS.length]);
   const total=data.reduce((a,b)=>a+b,0);
-  document.getElementById('pie-center-amt').textContent=fmtINR(total);
+  // pie-center-amt element removed per user request
   const ctx=document.getElementById('pie-chart');
   if(pieChart) pieChart.destroy();
   if(!labels.length){
