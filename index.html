@@ -85,9 +85,9 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--txt);font-s
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px}
 .grid-3-1{display:grid;grid-template-columns:3fr 2fr;gap:16px;margin-bottom:22px}
 .chart-wrap{position:relative;height:220px;margin-top:8px}
-.chart-center-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
-.chart-center-label .c-amt{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:600}
-.chart-center-label .c-lbl{font-size:10px;color:var(--txt2);margin-top:2px}
+.chart-center-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;background:rgba(10,12,16,.85);border-radius:50%;width:90px;height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,.1)}
+.chart-center-label .c-amt{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#fff}
+.chart-center-label .c-lbl{font-size:9px;color:var(--txt2);margin-top:2px}
 .tx-list{display:flex;flex-direction:column;gap:2px}
 .tx-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;transition:background .15s}
 .tx-row:hover{background:var(--elevated)}
@@ -707,15 +707,14 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// ── ENABLE OFFLINE + AUTH PERSISTENCE BEFORE ANYTHING ELSE ───────────────────
-(async function setupPersistence(){
-  try {
-    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-  } catch(e){ console.warn('Auth persistence:', e.message); }
-  try {
-    await db.enablePersistence({synchronizeTabs:false});
-  } catch(e){ console.warn('Firestore persistence:', e.code); }
-})();
+// ── ENABLE AUTH PERSISTENCE (Firestore offline cache disabled to avoid stale-data bugs) ──
+try {
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+} catch(e){ console.warn('Auth persistence:', e.message); }
+// Note: Firestore offline persistence intentionally NOT enabled.
+// It caused budget/profile data to load from stale local cache instead of
+// the live server value after re-login. Always reading from the server
+// keeps Budget, Net Worth, and Profile correct across all devices.
 
 // ── CONSTANTS ────────────────────────────────────────────────────────────────
 const CATS = [
@@ -1110,10 +1109,10 @@ function renderPieChart(exp){
     return;
   }
   pieChart=new Chart(ctx,{
-    type:'doughnut',
+    type:'pie',
     data:{labels:labels.map(k=>catById(k).emoji+' '+catById(k).label),datasets:[{data,backgroundColor:colors,borderColor:'transparent',hoverOffset:8}]},
     options:{
-      cutout:'68%',
+      cutout:'0%',
       plugins:{
         legend:{display:false},
         tooltip:{callbacks:{label:c=>{const p=Math.round(c.parsed/total*100);return ` ${fmtINR(c.parsed)} (${p}%)`}}},
